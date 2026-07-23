@@ -51,12 +51,12 @@ app.use('/proxy', (req, res, next) => {
                         const baseOrigin = targetObj.origin;
                         const proxyPrefix = '/proxy?url=';
 
-                        // 1. CSSや画像などの相対パスをプロキシ経由に書き換え
+                        // 1. 相対パス（hrefやsrc）をプロキシ経由に書き換え
                         html = html.replace(/(href|src|action)=["'](\/[^"']+)["']/g, (match, attr, path) => {
                             return `${attr}="${proxyPrefix}${encodeURIComponent(baseOrigin + path)}"`;
                         });
 
-                        // 2. ページ内のリンククリックを乗っ取り、プロキシ経由で開くためのJavaScriptをHTMLの末尾（</body>の前など）に埋め込む
+                        // 2. ページ内のリンククリックをフックしてプロキシ経由で開くスクリプトの埋め込み
                         const interceptScript = `
                         <script>
                             document.addEventListener('click', function(e) {
@@ -66,12 +66,10 @@ app.use('/proxy', (req, res, next) => {
                                     let href = target.getAttribute('href');
                                     let absoluteUrl = target.href;
                                     
-                                    // サイト内の相対パスの場合の考慮
-                                    if (href.startsWith('/')) {
+                                    if (href && href.startsWith('/')) {
                                         absoluteUrl = "${baseOrigin}" + href;
                                     }
                                     
-                                    // 親ウィンドウ（GAS側のURL入力欄など）にURLを通知するか、あるいは直接書き換える
                                     window.location.href = "/proxy?url=" + encodeURIComponent(absoluteUrl);
                                 }
                             }, true);
