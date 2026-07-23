@@ -32,7 +32,6 @@ app.use('/proxy', (req, res, next) => {
 
             const contentType = proxyRes.headers['content-type'] || '';
             
-            // HTMLの場合のみパスを書き換える処理を挟む
             if (contentType.includes('text/html')) {
                 const _write = res.write;
                 const _end = res.end;
@@ -45,20 +44,45 @@ app.use('/proxy', (req, res, next) => {
                 res.end = function (chunk) {
                     if (chunk) chunks.push(chunk);
                     let body = Buffer.concat(chunks);
-
-                    // 圧縮されている場合の考慮（簡易的）
                     const encoding = proxyRes.headers['content-encoding'];
+
                     const processBody = (htmlBuffer) => {
                         let html = htmlBuffer.toString('utf8');
-                        
-                        // 相対パスを絶対パスまたはプロキシ経由に置換するベース
                         const baseOrigin = targetObj.origin;
                         const proxyPrefix = '/proxy?url=';
 
-                        // hrefやsrcの相対パス（/で始まるものなど）をプロキシ経由に書き換え
+                        // 1. CSSや画像などの相対パスをプロキシ経由に書き換え
                         html = html.replace(/(href|src|action)=["'](\/[^"']+)["']/g, (match, attr, path) => {
                             return `${attr}="${proxyPrefix}${encodeURIComponent(baseOrigin + path)}"`;
                         });
+
+                        // 2. ページ内のリンククリックを乗っ取り、プロキシ経由で開くためのJavaScriptをHTMLの末尾（</body>の前など）に埋め込む
+                        const interceptScript = `
+                        <script>
+                            document.addEventListener('click', function(e) {
+                                let target = e.target.closest('a');
+                                if (target && target.href) {
+                                    e.preventDefault();
+                                    let href = target.getAttribute('href');
+                                    let absoluteUrl = target.href;
+                                    
+                                    // サイト内の相対パスの場合の考慮
+                                    if (href.startsWith('/')) {
+                                        absoluteUrl = "${baseOrigin}" + href;
+                                    }
+                                    
+                                    // 親ウィンドウ（GAS側のURL入力欄など）にURLを通知するか、あるいは直接書き換える
+                                    window.location.href = "/proxy?url=" + encodeURIComponent(absoluteUrl);
+                                }
+                            }, true);
+                        </script>
+                        `;
+
+                        if (html.includes('</body>')) {
+                            html = html.replace('</body>', interceptScript + '</body>');
+                        } else {
+                            html += interceptScript;
+                        }
 
                         const buf = Buffer.from(html, 'utf8');
                         res.setHeader('Content-Length', buf.length);
@@ -68,21 +92,13 @@ app.use('/proxy', (req, res, next) => {
 
                     if (encoding === 'gzip') {
                         zlib.gunzip(body, (err, decoded) => {
-                            if (err) {
-                                _write.call(res, body);
-                                _end.call(res);
-                            } else {
-                                processBody(decoded);
-                            }
+                            if (err) { _write.call(res, body); _end.call(res); }
+                            else { processBody(decoded); }
                         });
                     } else if (encoding === 'deflate') {
                         zlib.inflate(body, (err, decoded) => {
-                            if (err) {
-                                _write.call(res, body);
-                                _end.call(res);
-                            } else {
-                                processBody(decoded);
-                            }
+                            if (err) { _write.call(res, body); _end.call(res); }
+                            else { processBody(decoded); }
                         });
                     } else {
                         processBody(body);
