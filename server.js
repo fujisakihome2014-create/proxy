@@ -5,19 +5,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use('/proxy', (req, res, next) => {
-    const encodedUrl = req.query.url;
-    if (!encodedUrl) {
-        return res.status(400).send('URLが指定されていません。');
-    }
-
-    let targetUrl;
-    try {
-        // Base64でエンコードされたURLをデコードする
-        targetUrl = Buffer.from(encodedUrl, 'base64').toString('utf8');
-        // URLとしての正当性をチェック
-        new URL(targetUrl);
-    } catch (e) {
-        return res.status(400).send('無効な暗号化URLです。');
+    const targetUrl = req.query.url;
+    if (!targetUrl) {
+        return res.status(400).send('URLが指定されていません。例: /proxy?url=https://example.com');
     }
 
     createProxyMiddleware({
