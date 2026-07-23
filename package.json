@@ -1,18 +1,17 @@
 {
-  "name": "proxy-server",
+  "name": "ultraviolet-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "Advanced Ultraviolet Proxy Server",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "express": "^5.2.1",
-    "http-proxy-middleware": "^4.2.0",
-    "serve-static": "^2.2.1"
+    "express": "^4.19.2",
+    "ultraviolet": "^2.0.4",
+    "tough-cookie": "^4.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
