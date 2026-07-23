@@ -1,6 +1,5 @@
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const zlib = require('zlib');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,13 +8,6 @@ app.use('/proxy', (req, res, next) => {
     const targetUrl = req.query.url;
     if (!targetUrl) {
         return res.status(400).send('URLが指定されていません。例: /proxy?url=https://example.com');
-    }
-
-    let targetObj;
-    try {
-        targetObj = new URL(targetUrl);
-    } catch (e) {
-        return res.status(400).send('無効なURLです。');
     }
 
     createProxyMiddleware({
@@ -29,82 +21,6 @@ app.use('/proxy', (req, res, next) => {
         onProxyRes: (proxyRes, req, res) => {
             delete proxyRes.headers['x-frame-options'];
             delete proxyRes.headers['content-security-policy'];
-
-            const contentType = proxyRes.headers['content-type'] || '';
-            
-            if (contentType.includes('text/html')) {
-                const _write = res.write;
-                const _end = res.end;
-                let chunks = [];
-
-                res.write = function (chunk) {
-                    if (chunk) chunks.push(chunk);
-                };
-
-                res.end = function (chunk) {
-                    if (chunk) chunks.push(chunk);
-                    let body = Buffer.concat(chunks);
-                    const encoding = proxyRes.headers['content-encoding'];
-
-                    const processBody = (htmlBuffer) => {
-                        let html = htmlBuffer.toString('utf8');
-                        const baseOrigin = targetObj.origin;
-                        const proxyPrefix = '/proxy?url=';
-
-                        // 1. CSSや画像などの相対パスをプロキシ経由に書き換え
-                        html = html.replace(/(href|src|action)=["'](\/[^"']+)["']/g, (match, attr, path) => {
-                            return `${attr}="${proxyPrefix}${encodeURIComponent(baseOrigin + path)}"`;
-                        });
-
-                        // 2. ページ内のリンククリックを乗っ取り、プロキシ経由で開くためのJavaScriptをHTMLの末尾（</body>の前など）に埋め込む
-                        const interceptScript = `
-                        <script>
-                            document.addEventListener('click', function(e) {
-                                let target = e.target.closest('a');
-                                if (target && target.href) {
-                                    e.preventDefault();
-                                    let href = target.getAttribute('href');
-                                    let absoluteUrl = target.href;
-                                    
-                                    // サイト内の相対パスの場合の考慮
-                                    if (href.startsWith('/')) {
-                                        absoluteUrl = "${baseOrigin}" + href;
-                                    }
-                                    
-                                    // 親ウィンドウ（GAS側のURL入力欄など）にURLを通知するか、あるいは直接書き換える
-                                    window.location.href = "/proxy?url=" + encodeURIComponent(absoluteUrl);
-                                }
-                            }, true);
-                        </script>
-                        `;
-
-                        if (html.includes('</body>')) {
-                            html = html.replace('</body>', interceptScript + '</body>');
-                        } else {
-                            html += interceptScript;
-                        }
-
-                        const buf = Buffer.from(html, 'utf8');
-                        res.setHeader('Content-Length', buf.length);
-                        _write.call(res, buf);
-                        _end.call(res);
-                    };
-
-                    if (encoding === 'gzip') {
-                        zlib.gunzip(body, (err, decoded) => {
-                            if (err) { _write.call(res, body); _end.call(res); }
-                            else { processBody(decoded); }
-                        });
-                    } else if (encoding === 'deflate') {
-                        zlib.inflate(body, (err, decoded) => {
-                            if (err) { _write.call(res, body); _end.call(res); }
-                            else { processBody(decoded); }
-                        });
-                    } else {
-                        processBody(body);
-                    }
-                };
-            }
         }
     })(req, res, next);
 });
