@@ -4,22 +4,28 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use('/proxy', (req, res, next) => {
-    const targetUrl = req.query.url;
-    if (!targetUrl) {
-        return res.status(400).send('URLが指定されていません');
+// /proxy/ の後ろにBase64エンコードされたURLを受け取る
+app.use('/proxy/:encodedUrl', (req, res, next) => {
+    let targetUrl;
+    try {
+        // Base64をデコードして元のURLに戻す
+        targetUrl = Buffer.from(req.params.encodedUrl, 'base64').toString('utf8');
+    } catch (e) {
+        return res.status(400).send('無効なURLエンコードです');
     }
 
-    // プロキシミドルウェアを動的に生成して適用
+    if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
+        return res.status(400).send('有効なURLが指定されていません');
+    }
+
     createProxyMiddleware({
         target: targetUrl,
         changeOrigin: true,
         router: (req) => targetUrl,
         pathRewrite: {
-            '^/proxy': '',
+            '^/proxy/[^/]+': '',
         },
         onProxyRes: (proxyRes, req, res) => {
-            // iframeで表示できるようにブロック系のヘッダーをすべて削除する
             delete proxyRes.headers['x-frame-options'];
             delete proxyRes.headers['content-security-policy'];
             delete proxyRes.headers['x-content-type-options'];
