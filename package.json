@@ -1,15 +1,13 @@
 {
-  "name": "ultraviolet-server",
+  "name": "simple-proxy-server",
   "version": "1.0.0",
-  "description": "Advanced Ultraviolet Proxy Server",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.19.2",
-    "ultraviolet": "^2.0.4",
-    "tough-cookie": "^4.1.4"
+    "http-proxy-middleware": "^2.0.6"
   },
   "engines": {
     "node": ">=18.0.0"
